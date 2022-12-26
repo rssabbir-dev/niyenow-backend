@@ -53,6 +53,19 @@ const run = async () => {
 		const productCollection = database.collection('products');
 		const userCollection = database.collection('users');
 
+		//VerifyAdmin
+		const verifyAdmin = async (req, res, next) => {
+			const decoded = req.decoded;
+			const query = { uid: decoded.uid };
+			const user = await userCollection.findOne(query);
+			if (user.role !== 'admin') {
+				return res
+					.status(403)
+					.send({ code: 403, message: 'Access Forbidden' });
+			} else {
+				next();
+			}
+		};
 		//GET JWT TOKEN
 		app.get('/jwt', (req, res) => {
 			const uid = req.query.uid;
@@ -71,7 +84,7 @@ const run = async () => {
 			const product = await productCollection.findOne(query);
 			res.send(product);
 		});
-		app.post('/product',verifyJWT, async (req, res) => {
+		app.post('/product', verifyJWT, verifyAdmin, async (req, res) => {
 			const uid = req.query.uid;
 			const valid = verifyAuthorization(req, res, uid);
 			if (!valid) {
@@ -80,7 +93,6 @@ const run = async () => {
 			const product = req.body;
 			const result = await productCollection.insertOne(product);
 			res.send(result);
-			console.log(result);
 		});
 
 		//users
@@ -102,15 +114,50 @@ const run = async () => {
 			const user = await userCollection.findOne(query);
 			res.send({ role: user.role });
 		});
-		app.get('/admin-products/:uid', verifyJWT, async (req, res) => {
+		app.get(
+			'/admin-products/:uid',
+			verifyJWT,
+			verifyAdmin,
+			async (req, res) => {
+				const uid = req.params.uid;
+				const valid = verifyAuthorization(req, res, uid);
+				if (!valid) {
+					return;
+				}
+				const query = { 'seller_info.seller_uid': uid };
+				const products = await productCollection.find(query).toArray();
+				res.send(products);
+			}
+		);
+
+		//cart
+		app.patch('/add-to-cart/:uid', verifyJWT, async (req, res) => {
+			const uid = req.params.uid;
+			const order = req.body;
+			const valid = verifyAuthorization(req, res, uid);
+			if (!valid) {
+				return;
+			}
+			const filter = { uid };
+			const option = { upsert: true };
+			const updatedDoc = {
+				$push: {
+					cart: order,
+				},
+			};
+			const result = await userCollection.updateOne(filter, updatedDoc);
+			console.log(result);
+			res.send(result)
+		})
+		app.get('/get-cart/:uid', verifyJWT, async (req, res) => {
 			const uid = req.params.uid;
 			const valid = verifyAuthorization(req, res, uid);
 			if (!valid) {
 				return;
 			}
-			const query = { 'seller_info.seller_uid': uid };
-			const products = await productCollection.find(query).toArray();
-			res.send(products);
+			const query = { uid };
+			const user = await userCollection.findOne(query);
+			res.send({ cart: user.cart });
 		});
 	} finally {
 	}
