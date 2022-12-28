@@ -5,6 +5,7 @@ require('dotenv').config();
 const jwt = require('jsonwebtoken');
 const port = process.env.PORT || 5000;
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
+const { query } = require('express');
 const stripe = require('stripe')(process.env.STRIPE_SECRET);
 
 //Middleware
@@ -56,7 +57,7 @@ const run = async () => {
 		const categoryCollection = database.collection('categories');
 		const cartCollection = database.collection('carts');
 		const orderCollection = database.collection('orders');
-		const paymentCollection = database.collection('payments')
+		const paymentCollection = database.collection('payments');
 
 		//VerifyAdmin
 		const verifyAdmin = async (req, res, next) => {
@@ -214,23 +215,24 @@ const run = async () => {
 			const deleteCart = await cartCollection.deleteMany({ uid });
 		});
 		//get orders
-		app.get('/get-orders/:uid', verifyJWT, async (req, res) => {
-			const uid = req.params.uid;
-			const valid = verifyAuthorization(req, res, uid);
-			if (!valid) {
-				return;
-			}
-			const orders = await orderCollection.findOne({ customer_uid: uid });
-			res.send(orders);
-		});
+		// app.get('/get-orders/:uid', verifyJWT, async (req, res) => {
+		// 	const uid = req.params.uid;
+		// 	const id = req.params.
+		// 	const valid = verifyAuthorization(req, res, uid);
+		// 	if (!valid) {
+		// 		return;
+		// 	}
+		// 	const orders = await orderCollection.findOne({ customer_uid: uid });
+		// 	res.send(orders);
+		// });
 
 		//Create Payment Intent
 		app.post('/create-payment-intent/:uid', verifyJWT, async (req, res) => {
 			const uid = req.params.uid;
 			const id = req.query.id;
-			const valid = verifyAuthorization(req, res, uid)
+			const valid = verifyAuthorization(req, res, uid);
 			if (!valid) {
-				return
+				return;
 			}
 			const query = { _id: ObjectId(id) };
 			const order = await orderCollection.findOne(query);
@@ -248,7 +250,7 @@ const run = async () => {
 			const uid = req.params.uid;
 			const valid = verifyAuthorization(req, res, uid);
 			if (!valid) {
-				return
+				return;
 			}
 			const payment = req.body;
 			const result = await paymentCollection.insertOne(payment);
@@ -259,6 +261,8 @@ const run = async () => {
 			const orderUpdatedDoc = {
 				$set: {
 					payment_status: true,
+					order_status: 'processing',
+					address:payment.address
 				},
 			};
 			const orderResult = await orderCollection.updateOne(
@@ -280,6 +284,69 @@ const run = async () => {
 			// 	option
 			// );
 		});
+		//Get all customer order
+		app.get('/my-order/:uid', verifyJWT, async (req, res) => {
+			const uid = req.params.uid;
+			const query = { customer_uid: uid };
+			const valid = verifyAuthorization(req, res, uid);
+			if (!valid) {
+				return;
+			}
+			const orders = await orderCollection.find(query).toArray();
+			res.send(orders);
+			console.log(orders);
+		});
+		//Get an Order
+		app.get('/order/:uid', verifyJWT, async (req, res) => {
+			const uid = req.params.uid;
+			const id = req.query.id;
+			const query = { _id: ObjectId(id) };
+			const valid = verifyAuthorization(req, res, uid);
+			if (!valid) {
+				return;
+			}
+			const order = await orderCollection.findOne(query);
+			res.send(order);
+		});
+
+		//Update order status
+		app.patch(
+			'/update-status/:uid',
+			verifyJWT,
+			verifyAdmin,
+			async (req, res) => {
+				const uid = req.params.uid;
+				const valid = verifyAuthorization(req, res, uid);
+				if (!valid) {
+					return;
+				}
+				const id = req.query.id;
+				const status = req.query.status;
+				const query = { _id: ObjectId(id) };
+				const updatedDoc = {
+					$set: {
+						order_status: status,
+					},
+				};
+				const option = { upsert: true };
+				const result = await orderCollection.updateOne(
+					query,
+					updatedDoc,
+					option
+				);
+				res.send(result);
+			}
+		);
+		//Sales 
+		app.get('/sales-report/:uid',verifyJWT,verifyAdmin,async(req,res) =>{
+			const uid = req.params.uid;
+			const valid = verifyAuthorization(req,res,uid)
+			if(!valid){
+				return
+			}
+			const sales = await paymentCollection.find({}).toArray()
+			res.send(sales)
+		})
 	} finally {
 	}
 };
