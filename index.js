@@ -5,7 +5,7 @@ require('dotenv').config();
 const jwt = require('jsonwebtoken');
 const port = process.env.PORT || 5000;
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
-const { query } = require('express');
+const { format } = require('date-fns');
 const stripe = require('stripe')(process.env.STRIPE_SECRET);
 
 //Middleware
@@ -58,6 +58,7 @@ const run = async () => {
 		const cartCollection = database.collection('carts');
 		const orderCollection = database.collection('orders');
 		const paymentCollection = database.collection('payments');
+		const sliderCollection = database.collection('sliders');
 
 		//VerifyAdmin
 		const verifyAdmin = async (req, res, next) => {
@@ -80,7 +81,7 @@ const run = async () => {
 		});
 		//product operation
 		app.get('/products', async (req, res) => {
-			const query = {};
+			const query = { visibility: true };
 			const products = await productCollection.find(query).toArray();
 			res.send(products);
 		});
@@ -100,7 +101,78 @@ const run = async () => {
 			const result = await productCollection.insertOne(product);
 			res.send(result);
 		});
+		app.patch('/product/:uid', verifyJWT, verifyAdmin, async (req, res) => {
+			const uid = req.params.uid;
+			const valid = verifyAuthorization(req, res, uid);
+			if (!valid) {
+				return;
+			}
+			const id = req.query.id;
+			const filter = { _id: ObjectId(id) };
+			const data = req.body;
+			const updatedDoc = {
+				$set: {
+					'product_info.product_name': data.product_name,
+					'product_info.product_description':
+						data.product_description,
+					'product_info.product_category': data.product_category,
+					'product_info.product_image': data.product_image,
+					'product_info.product_price': parseInt(data.product_price),
+					'product_info.product_quantity': parseInt(
+						data.product_quantity
+					),
+				},
+			};
+			const result = await productCollection.updateOne(
+				filter,
+				updatedDoc
+			);
+			res.send(result);
+		});
 
+		app.delete(
+			'/product/:uid',
+			verifyJWT,
+			verifyAdmin,
+			async (req, res) => {
+				const uid = req.params.uid;
+				const valid = verifyAuthorization(req, res, uid);
+				if (!valid) {
+					return;
+				}
+				const id = req.query.id;
+				const query = { _id: ObjectId(id) };
+				const result = await productCollection.deleteOne(query);
+				res.send(result);
+			}
+		);
+		app.patch(
+			'/product-visibility/:uid',
+			verifyJWT,
+			verifyAdmin,
+			async (req, res) => {
+				const uid = req.params.uid;
+				const valid = verifyAuthorization(req, res, uid);
+				if (!valid) {
+					return;
+				}
+				const id = req.query.id;
+				const filter = { _id: ObjectId(id) };
+				const visibility = req.body.visibility;
+				const option = { upsert: true };
+				const updatedDoc = {
+					$set: {
+						visibility: visibility,
+					},
+				};
+				const result = await productCollection.updateOne(
+					filter,
+					updatedDoc,
+					option
+				);
+				res.send(result);
+			}
+		);
 		//users
 		app.post('/users', async (req, res) => {
 			const user = req.body;
@@ -111,8 +183,6 @@ const run = async () => {
 			}
 			const result = await userCollection.insertOne(user);
 			res.send(result);
-			console.log(user);
-			console.log(result);
 		});
 
 		//Admin
@@ -186,7 +256,6 @@ const run = async () => {
 			const category = req.body;
 			const result = await categoryCollection.insertOne(category);
 			res.send(result);
-			console.log('gg');
 		});
 
 		//Customer
@@ -198,7 +267,6 @@ const run = async () => {
 			}
 			const query = { role: 'customer' };
 			const customers = await userCollection.find(query).toArray();
-			console.log(customers);
 			res.send(customers);
 		});
 
@@ -262,7 +330,8 @@ const run = async () => {
 				$set: {
 					payment_status: true,
 					order_status: 'processing',
-					address:payment.address
+					address: payment.address,
+					transactionId: payment.transactionId,
 				},
 			};
 			const orderResult = await orderCollection.updateOne(
@@ -270,6 +339,29 @@ const run = async () => {
 				orderUpdatedDoc,
 				option
 			);
+			const ordered_products = payment.ordered_products;
+			for (let i = 0; i < ordered_products.length; i++) {
+				const element = ordered_products[i];
+				const elementQuery = { _id: ObjectId(element[0]) };
+				const elementQuantity = element[1];
+				const product = await productCollection.findOne(elementQuery);
+				// const elementOption = {upsert:true}
+				const updatedDoc = {
+					$set: {
+						'product_info.product_quantity':
+							parseInt(product.product_info.product_quantity) -
+							parseInt(elementQuantity),
+						'product_info.totalSale':
+							parseInt(product.product_info.totalSale) +
+							parseInt(elementQuantity),
+					},
+				};
+				const result = await productCollection.updateOne(
+					elementQuery,
+					updatedDoc
+				);
+			}
+
 			//set order status true and promote status false after payment done
 			// const productQuery = { _id: ObjectId(payment.product_id) };
 			// const productUpdatedDoc = {
@@ -294,7 +386,6 @@ const run = async () => {
 			}
 			const orders = await orderCollection.find(query).toArray();
 			res.send(orders);
-			console.log(orders);
 		});
 		//Get an Order
 		app.get('/order/:uid', verifyJWT, async (req, res) => {
@@ -337,16 +428,92 @@ const run = async () => {
 				res.send(result);
 			}
 		);
-		//Sales 
-		app.get('/sales-report/:uid',verifyJWT,verifyAdmin,async(req,res) =>{
-			const uid = req.params.uid;
-			const valid = verifyAuthorization(req,res,uid)
-			if(!valid){
-				return
+		//Sales
+		app.get(
+			'/sales-report/:uid',
+			verifyJWT,
+			verifyAdmin,
+			async (req, res) => {
+				const uid = req.params.uid;
+				const valid = verifyAuthorization(req, res, uid);
+				if (!valid) {
+					return;
+				}
+				const sales = await paymentCollection
+					.find({})
+					.sort({ createAt: -1 })
+					.toArray();
+				res.send(sales);
 			}
-			const sales = await paymentCollection.find({}).toArray()
-			res.send(sales)
-		})
+		);
+
+		//Top Sales
+		app.get('/top-sales', async (req, res) => {
+			const products = await productCollection
+				.find({})
+				.sort({ 'product_info.totalSale': -1 })
+				.limit(5)
+				.toArray();
+			res.send(products);
+		});
+		//Recent Product Added
+		app.get('/recent-products', async (req, res) => {
+			const products = await productCollection
+				.find({})
+				.sort({ createAt: -1 })
+				.limit(5)
+				.toArray();
+			res.send(products);
+		});
+
+		//Monthly Sales Report
+		app.get(
+			'/monthly-sales-report/:uid',
+			verifyJWT,
+			verifyAdmin,
+			async (req, res) => {
+				const uid = req.params.uid;
+				const valid = verifyAuthorization(req, res, uid);
+				if (!valid) {
+					return;
+				}
+				const allSales = await paymentCollection.find({}).toArray();
+				// const report = allSales.map(sale => {
+				// 	return {}
+				// })
+				const result = allSales.reduce((prev, curr) => {
+					if (!prev[format(new Date(curr.createAt), 'P')]) {
+						prev[format(new Date(curr.createAt), 'P')] = 0;
+					}
+					prev[format(new Date(curr.createAt), 'P')] += curr.price;
+					return prev;
+				}, {});
+				const data = [];
+				for (const key in result) {
+					const income = result[key];
+					data.push({ date: key, income });
+				}
+				res.send(data);
+			}
+		);
+		app.get('/sliders', async (req, res) => {
+			const query = {};
+			const sliders = await sliderCollection
+				.find(query)
+				.limit(3)
+				.toArray();
+			res.send(sliders);
+		});
+		app.post('/sliders', verifyJWT, verifyAdmin, async (req, res) => {
+			const uid = req.query.uid;
+			const valid = verifyAuthorization(req, res, uid);
+			if (!valid) {
+				return;
+			}
+			const slide = req.body;
+			const result = await sliderCollection.insertOne(slide);
+			res.send(result);
+		});
 	} finally {
 	}
 };
