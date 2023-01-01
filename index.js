@@ -178,8 +178,8 @@ const run = async () => {
 			const user = req.body;
 			const query = { uid: user.uid };
 			const exit = await userCollection.findOne(query);
-			if (exit) {
-				return;
+			if (exit?.uid === user.uid) {
+				return res.send({ message: 'User Already has' });
 			}
 			const result = await userCollection.insertOne(user);
 			res.send(result);
@@ -377,6 +377,39 @@ const run = async () => {
 			// );
 		});
 		//Get all customer order
+		app.get(
+			'/customers-order/:uid',
+			verifyJWT,
+			verifyAdmin,
+			async (req, res) => {
+				const uid = req.params.uid;
+				const query = {};
+				const valid = verifyAuthorization(req, res, uid);
+				if (!valid) {
+					return;
+				}
+				const orders = await orderCollection.find(query).toArray();
+				const shippedCount = await orderCollection.countDocuments({
+					order_status: 'shipped',
+				});
+				const processingCount = await orderCollection.countDocuments({
+					order_status: 'processing',
+				});
+				const paymentPendingCount =
+					await orderCollection.countDocuments({
+						order_status: 'payment pending',
+					});
+
+				res.send({
+					orders,
+					count: {
+						processingCount,
+						shippedCount,
+						paymentPendingCount,
+					},
+				});
+			}
+		);
 		app.get('/my-order/:uid', verifyJWT, async (req, res) => {
 			const uid = req.params.uid;
 			const query = { customer_uid: uid };
@@ -448,54 +481,54 @@ const run = async () => {
 		);
 
 		//Top Sales
-		app.get('/top-sales', async (req, res) => {
-			const products = await productCollection
-				.find({})
-				.sort({ 'product_info.totalSale': -1 })
-				.limit(5)
-				.toArray();
-			res.send(products);
-		});
+		// app.get('/top-sales', async (req, res) => {
+		// 	const products = await productCollection
+		// 		.find({})
+		// 		.sort({ 'product_info.totalSale': -1 })
+		// 		.limit(5)
+		// 		.toArray();
+		// 	res.send(products);
+		// });
 		//Recent Product Added
-		app.get('/recent-products', async (req, res) => {
-			const products = await productCollection
-				.find({})
-				.sort({ createAt: -1 })
-				.limit(5)
-				.toArray();
-			res.send(products);
-		});
+		// app.get('/recent-products', async (req, res) => {
+		// 	const products = await productCollection
+		// 		.find({})
+		// 		.sort({ createAt: -1 })
+		// 		.limit(5)
+		// 		.toArray();
+		// 	res.send(products);
+		// });
 
 		//Monthly Sales Report
-		app.get(
-			'/monthly-sales-report/:uid',
-			verifyJWT,
-			verifyAdmin,
-			async (req, res) => {
-				const uid = req.params.uid;
-				const valid = verifyAuthorization(req, res, uid);
-				if (!valid) {
-					return;
-				}
-				const allSales = await paymentCollection.find({}).toArray();
-				// const report = allSales.map(sale => {
-				// 	return {}
-				// })
-				const result = allSales.reduce((prev, curr) => {
-					if (!prev[format(new Date(curr.createAt), 'P')]) {
-						prev[format(new Date(curr.createAt), 'P')] = 0;
-					}
-					prev[format(new Date(curr.createAt), 'P')] += curr.price;
-					return prev;
-				}, {});
-				const data = [];
-				for (const key in result) {
-					const income = result[key];
-					data.push({ date: key, income });
-				}
-				res.send(data);
-			}
-		);
+		// app.get(
+		// 	'/monthly-sales-report/:uid',
+		// 	verifyJWT,
+		// 	verifyAdmin,
+		// 	async (req, res) => {
+		// 		const uid = req.params.uid;
+		// 		const valid = verifyAuthorization(req, res, uid);
+		// 		if (!valid) {
+		// 			return;
+		// 		}
+		// 		const allSales = await paymentCollection.find({}).toArray();
+		// 		// const report = allSales.map(sale => {
+		// 		// 	return {}
+		// 		// })
+		// 		const result = allSales.reduce((prev, curr) => {
+		// 			if (!prev[format(new Date(curr.createAt), 'P')]) {
+		// 				prev[format(new Date(curr.createAt), 'P')] = 0;
+		// 			}
+		// 			prev[format(new Date(curr.createAt), 'P')] += curr.price;
+		// 			return prev;
+		// 		}, {});
+		// 		const data = [];
+		// 		for (const key in result) {
+		// 			const income = result[key];
+		// 			data.push({ date: key, income });
+		// 		}
+		// 		res.send(data);
+		// 	}
+		// );
 		app.get('/sliders', async (req, res) => {
 			const query = {};
 			const sliders = await sliderCollection
@@ -512,8 +545,89 @@ const run = async () => {
 			}
 			const slide = req.body;
 			const result = await sliderCollection.insertOne(slide);
+			console.log(result);
 			res.send(result);
 		});
+
+		app.get('/top-categories', async (req, res) => {
+			const query = {};
+			const categories = await categoryCollection
+				.find(query)
+				.limit(3)
+				.toArray();
+			res.send(categories);
+		});
+		app.get('/category-products/:slug', async (req, res) => {
+			const slug = req.params.slug;
+			const query = { slug: slug };
+			const category = await categoryCollection.findOne(query);
+			const products = await productCollection
+				.find({ 'product_info.category_slug': slug })
+				.toArray();
+			res.send({ category_name: category.name, products: products });
+		});
+
+		app.get(
+			'/dashboard-data/:uid',
+			verifyJWT,
+			verifyAdmin,
+			async (req, res) => {
+				const uid = req.params.uid;
+				const valid = verifyAuthorization(req, res, uid);
+				if (!valid) {
+					return;
+				}
+
+				const topSellingProducts = await productCollection
+					.find({})
+					.sort({ 'product_info.totalSale': -1 })
+					.limit(5)
+					.toArray();
+				const recentProducts = await productCollection
+					.find({})
+					.sort({ createAt: -1 })
+					.limit(5)
+					.toArray();
+				const monthlyAllSales = await paymentCollection
+					.find({})
+					.toArray();
+				// const report = allSales.map(sale => {
+				// 	return {}
+				// })
+				const totalMonthlySales = monthlyAllSales.reduce(
+					(prev, curr) => {
+						if (!prev[format(new Date(curr.createAt), 'P')]) {
+							prev[format(new Date(curr.createAt), 'P')] = 0;
+						}
+						prev[format(new Date(curr.createAt), 'P')] +=
+							curr.price;
+						return prev;
+					},
+					{}
+				);
+				const monthlyChartData = [];
+				for (const key in totalMonthlySales) {
+					const income = totalMonthlySales[key];
+					monthlyChartData.push({ date: key, income });
+				}
+				const totalOrder =
+					await orderCollection.estimatedDocumentCount();
+				const totalProducts =
+					await productCollection.estimatedDocumentCount();
+				const todayDate = format(new Date(), 'P');
+				const todaySale = monthlyChartData.find(
+					(chart) => chart.date === todayDate
+				);
+				res.send({
+					topSellingProducts,
+					recentProducts,
+					monthlyChartData,
+					totalOrder,
+					totalProducts,
+					todaySale: todaySale?.income,
+				});
+			}
+		);
 	} finally {
 	}
 };
