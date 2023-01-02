@@ -51,7 +51,6 @@ const verifyAuthorization = (req, res, uid) => {
 
 const run = async () => {
 	try {
-
 		//All NiyenowDB Collection
 		const database = client.db('niyenowDB');
 		const productCollection = database.collection('products');
@@ -84,20 +83,32 @@ const run = async () => {
 		});
 
 		//------------All Product Operation----------------//
-		
+
 		//Get only those product who was published
 		app.get('/products', async (req, res) => {
+			const perPageView = parseInt(req.query.perPageView);
+			const currentPage = parseInt(req.query.currentPage);
+
 			const query = { visibility: true };
-			const products = await productCollection.find(query).toArray();
-			res.send(products);
+			const products = await productCollection
+				.find(query)
+				.skip(perPageView * currentPage)
+				.limit(perPageView)
+				.toArray();
+			const productsCount = await productCollection.countDocuments(query);
+			res.send({ products, productsCount });
 		});
 
 		//Get a single product for product view page
 		app.get('/product/:id', async (req, res) => {
 			const id = req.params.id;
-			const query = { _id: ObjectId(id) };
-			const product = await productCollection.findOne(query);
-			res.send(product);
+			const productQuery = { _id: ObjectId(id) };
+			const reviewsQuery = { product_id: id };
+
+			const product = await productCollection.findOne(productQuery);
+			// const reviews = await reviewCollection.find(reviewsQuery).toArray();
+			// res.send({ product, reviews });
+			res.send({ product });
 		});
 		//Post a product for admin
 		app.post('/product', verifyJWT, verifyAdmin, async (req, res) => {
@@ -232,6 +243,27 @@ const run = async () => {
 			if (!valid) {
 				return;
 			}
+
+			const prevOrder = await cartCollection.findOne({
+				'product_info.id': order.product_info.id,
+				uid: uid,
+			});
+			console.log(prevOrder);
+			if (prevOrder?.product_info?.id) {
+				const updateQuery = { _id: ObjectId(prevOrder._id) };
+				const updateDoc = {
+					$set: {
+						'product_info.quantity':
+							parseInt(prevOrder.product_info.quantity) +
+							parseInt(order.product_info.quantity),
+					},
+				};
+				const result = await cartCollection.updateOne(
+					updateQuery,
+					updateDoc
+				);
+				return res.send(result);
+			}
 			const result = await cartCollection.insertOne(order);
 			res.send(result);
 		});
@@ -259,7 +291,6 @@ const run = async () => {
 			const result = await cartCollection.deleteOne(query);
 			res.send(result);
 		});
-
 
 		//Get all Categories list
 		app.get('/categories', async (req, res) => {
@@ -572,7 +603,6 @@ const run = async () => {
 			}
 			const slide = req.body;
 			const result = await sliderCollection.insertOne(slide);
-			console.log(result);
 			res.send(result);
 		});
 
@@ -659,7 +689,20 @@ const run = async () => {
 			}
 		);
 
-		///Post a new review by user
+		//Get all review under a product marge with /product/:id
+		app.get('/reviews/:id', async (req, res) => {
+			const id = req.params.id;
+			const query = { product_id: id };
+			const reviews = await reviewCollection.find(query).toArray();
+			const reviewsCount = await reviewCollection.countDocuments(query);
+			const sumOfReview = reviews.reduce(
+				(prev, review) => review.customer_rating + prev,
+				0
+			);
+			const averageSumOfReview = sumOfReview / reviewsCount;
+			res.send({ reviews, reviewsCount, averageSumOfReview });
+		});
+		//Post a new review by user
 		app.post('/review/:uid', verifyJWT, async (req, res) => {
 			const uid = req.params.uid;
 			const valid = verifyAuthorization(req, res, uid);
