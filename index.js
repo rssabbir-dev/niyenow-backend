@@ -51,6 +51,8 @@ const verifyAuthorization = (req, res, uid) => {
 
 const run = async () => {
 	try {
+
+		//All NiyenowDB Collection
 		const database = client.db('niyenowDB');
 		const productCollection = database.collection('products');
 		const userCollection = database.collection('users');
@@ -80,18 +82,24 @@ const run = async () => {
 			const token = jwt.sign({ uid }, process.env.JWT_SECRET_TOKEN);
 			res.send({ token });
 		});
-		//product operation
+
+		//------------All Product Operation----------------//
+		
+		//Get only those product who was published
 		app.get('/products', async (req, res) => {
 			const query = { visibility: true };
 			const products = await productCollection.find(query).toArray();
 			res.send(products);
 		});
+
+		//Get a single product for product view page
 		app.get('/product/:id', async (req, res) => {
 			const id = req.params.id;
 			const query = { _id: ObjectId(id) };
 			const product = await productCollection.findOne(query);
 			res.send(product);
 		});
+		//Post a product for admin
 		app.post('/product', verifyJWT, verifyAdmin, async (req, res) => {
 			const uid = req.query.uid;
 			const valid = verifyAuthorization(req, res, uid);
@@ -102,6 +110,7 @@ const run = async () => {
 			const result = await productCollection.insertOne(product);
 			res.send(result);
 		});
+		//Update a product for admin
 		app.patch('/product/:uid', verifyJWT, verifyAdmin, async (req, res) => {
 			const uid = req.params.uid;
 			const valid = verifyAuthorization(req, res, uid);
@@ -131,6 +140,7 @@ const run = async () => {
 			res.send(result);
 		});
 
+		//Delete a product for admin
 		app.delete(
 			'/product/:uid',
 			verifyJWT,
@@ -147,6 +157,7 @@ const run = async () => {
 				res.send(result);
 			}
 		);
+		//Change product visibility link publish and unpublish for admin
 		app.patch(
 			'/product-visibility/:uid',
 			verifyJWT,
@@ -174,7 +185,9 @@ const run = async () => {
 				res.send(result);
 			}
 		);
-		//users
+
+		//---------------All User Operation------------//
+		//Save a user in database after registration
 		app.post('/users', async (req, res) => {
 			const user = req.body;
 			const query = { uid: user.uid };
@@ -186,13 +199,15 @@ const run = async () => {
 			res.send(result);
 		});
 
-		//Admin
+		//Verify a user, is user admin?
 		app.get('/admin', async (req, res) => {
 			const uid = req.query.uid;
 			const query = { uid: uid };
 			const user = await userCollection.findOne(query);
 			res.send({ role: user.role });
 		});
+
+		//Get all Admin product
 		app.get(
 			'/admin-products/:uid',
 			verifyJWT,
@@ -209,7 +224,7 @@ const run = async () => {
 			}
 		);
 
-		//cart
+		//Save user cart
 		app.post('/add-to-cart/:uid', verifyJWT, async (req, res) => {
 			const uid = req.params.uid;
 			const order = req.body;
@@ -220,6 +235,8 @@ const run = async () => {
 			const result = await cartCollection.insertOne(order);
 			res.send(result);
 		});
+
+		//Get All User Cart
 		app.get('/get-cart/:uid', verifyJWT, async (req, res) => {
 			const uid = req.params.uid;
 			const valid = verifyAuthorization(req, res, uid);
@@ -230,6 +247,7 @@ const run = async () => {
 			const cart = await cartCollection.find(query).toArray();
 			res.send(cart);
 		});
+		//Delete a cart item by user
 		app.delete('/delete-cart/:uid', verifyJWT, async (req, res) => {
 			const uid = req.params.uid;
 			const id = req.query.id;
@@ -242,12 +260,15 @@ const run = async () => {
 			res.send(result);
 		});
 
-		//Categories
+
+		//Get all Categories list
 		app.get('/categories', async (req, res) => {
 			const query = {};
 			const categories = await categoryCollection.find(query).toArray();
 			res.send(categories);
 		});
+
+		//Post a new category by admin
 		app.post('/categories', verifyJWT, verifyAdmin, async (req, res) => {
 			const uid = req.query.uid;
 			const valid = verifyAuthorization(req, res, uid);
@@ -259,7 +280,7 @@ const run = async () => {
 			res.send(result);
 		});
 
-		//Customer
+		//Get all user list for admin
 		app.get('/customers/:uid', verifyJWT, verifyAdmin, async (req, res) => {
 			const uid = req.params.uid;
 			const valid = verifyAuthorization(req, res, uid);
@@ -271,7 +292,7 @@ const run = async () => {
 			res.send(customers);
 		});
 
-		//Confirm Order
+		//Confirm and save user order in database
 		app.post('/confirm-order/:uid', verifyJWT, async (req, res) => {
 			const uid = req.params.uid;
 			const valid = verifyAuthorization(req, res, uid);
@@ -411,6 +432,8 @@ const run = async () => {
 				});
 			}
 		);
+
+		//Get user order data
 		app.get('/my-order/:uid', verifyJWT, async (req, res) => {
 			const uid = req.params.uid;
 			const query = { customer_uid: uid };
@@ -421,7 +444,7 @@ const run = async () => {
 			const orders = await orderCollection.find(query).toArray();
 			res.send(orders);
 		});
-		//Get an Order
+		//Get a single order for user
 		app.get('/order/:uid', verifyJWT, async (req, res) => {
 			const uid = req.params.uid;
 			const id = req.query.id;
@@ -434,7 +457,7 @@ const run = async () => {
 			res.send(order);
 		});
 
-		//Update order status
+		//Update order status by admin
 		app.patch(
 			'/update-status/:uid',
 			verifyJWT,
@@ -462,7 +485,7 @@ const run = async () => {
 				res.send(result);
 			}
 		);
-		//Sales
+		//All Sales Report for admin
 		app.get(
 			'/sales-report/:uid',
 			verifyJWT,
@@ -530,6 +553,8 @@ const run = async () => {
 		// 		res.send(data);
 		// 	}
 		// );
+
+		//Get all Slider
 		app.get('/sliders', async (req, res) => {
 			const query = {};
 			const sliders = await sliderCollection
@@ -538,6 +563,7 @@ const run = async () => {
 				.toArray();
 			res.send(sliders);
 		});
+		//post a slide items by admin
 		app.post('/sliders', verifyJWT, verifyAdmin, async (req, res) => {
 			const uid = req.query.uid;
 			const valid = verifyAuthorization(req, res, uid);
@@ -550,6 +576,7 @@ const run = async () => {
 			res.send(result);
 		});
 
+		//Get top three category items for home page
 		app.get('/top-categories', async (req, res) => {
 			const query = {};
 			const categories = await categoryCollection
@@ -558,6 +585,7 @@ const run = async () => {
 				.toArray();
 			res.send(categories);
 		});
+		//Get all products under a category
 		app.get('/category-products/:slug', async (req, res) => {
 			const slug = req.params.slug;
 			const query = { slug: slug };
@@ -568,6 +596,7 @@ const run = async () => {
 			res.send({ category_name: category.name, products: products });
 		});
 
+		//Get all AdminHome dashboard data
 		app.get(
 			'/dashboard-data/:uid',
 			verifyJWT,
@@ -630,7 +659,7 @@ const run = async () => {
 			}
 		);
 
-		///REview
+		///Post a new review by user
 		app.post('/review/:uid', verifyJWT, async (req, res) => {
 			const uid = req.params.uid;
 			const valid = verifyAuthorization(req, res, uid);
