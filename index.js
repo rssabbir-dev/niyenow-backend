@@ -59,6 +59,7 @@ const run = async () => {
 		const orderCollection = database.collection('orders');
 		const paymentCollection = database.collection('payments');
 		const sliderCollection = database.collection('sliders');
+		const reviewCollection = database.collection('reviews');
 
 		//VerifyAdmin
 		const verifyAdmin = async (req, res, next) => {
@@ -628,6 +629,18 @@ const run = async () => {
 				});
 			}
 		);
+
+		///REview
+		app.post('/review/:uid', verifyJWT, async (req, res) => {
+			const uid = req.params.uid;
+			const valid = verifyAuthorization(req, res, uid);
+			if (!valid) {
+				return;
+			}
+			const review = req.body;
+			const result = await reviewCollection.insertOne(review);
+			res.send(result);
+		});
 	} finally {
 	}
 };
