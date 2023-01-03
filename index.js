@@ -692,13 +692,27 @@ const run = async () => {
 		//Get all review under a product marge with /product/:id
 		app.get('/reviews/:id', async (req, res) => {
 			const id = req.params.id;
+			const perPageView = parseInt(req.query.perPageView);
+			const currentPage = parseInt(req.query.currentPage);
 			const query = { product_id: id };
-			const reviews = await reviewCollection.find(query).toArray();
+			const reviews = await reviewCollection
+				.find(query)
+				.skip(perPageView * currentPage)
+				.limit(perPageView)
+				.toArray();
 			const reviewsCount = await reviewCollection.countDocuments(query);
-			const sumOfReview = reviews.reduce(
-				(prev, review) => review.customer_rating + prev,
-				0
-			);
+			const sumOption = {
+				projection: {
+					_id:0,
+					customer_rating:1
+				},
+			};
+			// const sumOfReview = reviews.reduce(
+			// 	(prev, review) => review.customer_rating + prev,
+			// 	0
+			// );
+			const reviewRating = await reviewCollection.find(query,sumOption).toArray()
+			const sumOfReview = reviewRating.reduce((prev,{customer_rating})=> prev+customer_rating,0)
 			const averageSumOfReview = sumOfReview / reviewsCount;
 			res.send({ reviews, reviewsCount, averageSumOfReview });
 		});
