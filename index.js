@@ -26,14 +26,14 @@ const client = new MongoClient(uri, {
 const verifyJWT = (req, res, next) => {
 	const authHead = req.headers.authorization;
 	if (!authHead) {
-		return res.status(401).send({ code: 401, message: 'Access Denied' });
+		return res.status(401).send({ code: 401, message: 'User Access Denied' });
 	}
 	const token = authHead.split(' ')[1];
 	jwt.verify(token, process.env.JWT_SECRET_TOKEN, (err, decoded) => {
 		if (err) {
 			return res
 				.status(403)
-				.send({ code: 403, message: 'Access Forbidden' });
+				.send({ code: 403, message: 'User Access Forbidden' });
 		}
 		req.decoded = decoded;
 	});
@@ -43,7 +43,7 @@ const verifyJWT = (req, res, next) => {
 const verifyAuthorization = (req, res, uid) => {
 	const decoded = req.decoded;
 	if (uid !== decoded.uid) {
-		res.status(403).send({ code: 403, message: 'Access Forbidden' });
+		res.status(403).send({ code: 403, message: 'Access Forbidden, User not match' });
 		return false;
 	}
 	return true;
@@ -70,7 +70,7 @@ const run = async () => {
 			if (user.role !== 'admin') {
 				return res
 					.status(403)
-					.send({ code: 403, message: 'Access Forbidden' });
+					.send({ code: 403, message: 'Admin Access Forbidden' });
 			} else {
 				next();
 			}
@@ -94,6 +94,7 @@ const run = async () => {
 				.find(query)
 				.skip(perPageView * currentPage)
 				.limit(perPageView)
+				.sort({createAt:-1})
 				.toArray();
 			const productsCount = await productCollection.countDocuments(query);
 			res.send({ products, productsCount });
@@ -229,8 +230,9 @@ const run = async () => {
 				if (!valid) {
 					return;
 				}
-				const query = { 'seller_info.seller_uid': uid };
-				const products = await productCollection.find(query).toArray();
+				// const query = { 'seller_info.seller_uid': uid };
+				const query = {};
+				const products = await productCollection.find(query).sort({createAt:-1}).toArray();
 				res.send(products);
 			}
 		);
@@ -594,6 +596,13 @@ const run = async () => {
 				.toArray();
 			res.send(sliders);
 		});
+		//Get a single slide
+		app.get('/slide/:id', async (req, res) => {
+			const id = req.params.id;
+			const query = { _id: ObjectId(id) };
+			const slide = await sliderCollection.findOne(query);
+			res.send(slide);
+		});
 		//post a slide items by admin
 		app.post('/sliders', verifyJWT, verifyAdmin, async (req, res) => {
 			const uid = req.query.uid;
@@ -605,7 +614,40 @@ const run = async () => {
 			const result = await sliderCollection.insertOne(slide);
 			res.send(result);
 		});
-
+		//Update a slide
+		app.put('/slide/:uid', verifyJWT, verifyAdmin, async (req, res) => {
+			const uid = req.params.uid;
+			const valid = verifyAuthorization(req, res, uid);
+			if (!valid) {
+				return;
+			}
+			const id = req.query.id;
+			const updatedSlide = req.body;
+			const filter = { _id: ObjectId(id) };
+			const updatedDoc = {
+				$set: {
+					slide_title: updatedSlide.slide_title,
+					slide_description: updatedSlide.slide_description,
+					button_name: updatedSlide.button_name,
+					button_link: updatedSlide.button_link,
+					slide_image: updatedSlide.slide_image,
+				},
+			};
+			const result = await sliderCollection.updateOne(filter, updatedDoc);
+			res.send(result);
+		});
+		//Delete a slide
+		app.delete('/slide/:uid', verifyJWT, verifyAdmin, async (req, res) => {
+			const uid = req.params.uid;
+			const valid = verifyAuthorization(req, res, uid);
+			if (!valid) {
+				return;
+			}
+			const id = req.query.id;
+			const filter = {_id:ObjectId(id)}
+			const result = await sliderCollection.deleteOne(filter)
+			res.send(result)
+		})
 		//Get top three category items for home page
 		app.get('/top-categories', async (req, res) => {
 			const query = {};
@@ -626,6 +668,7 @@ const run = async () => {
 			res.send({ category_name: category.name, products: products });
 		});
 
+		
 		//Get all AdminHome dashboard data
 		app.get(
 			'/dashboard-data/:uid',
@@ -699,21 +742,27 @@ const run = async () => {
 				.find(query)
 				.skip(perPageView * currentPage)
 				.limit(perPageView)
+				.sort({createAt:-1})
 				.toArray();
 			const reviewsCount = await reviewCollection.countDocuments(query);
 			const sumOption = {
 				projection: {
-					_id:0,
-					customer_rating:1
+					_id: 0,
+					customer_rating: 1,
 				},
 			};
 			// const sumOfReview = reviews.reduce(
 			// 	(prev, review) => review.customer_rating + prev,
 			// 	0
 			// );
-			const reviewRating = await reviewCollection.find(query,sumOption).toArray()
-			const sumOfReview = reviewRating.reduce((prev,{customer_rating})=> prev+customer_rating,0)
-			const averageSumOfReview = sumOfReview / reviewsCount;
+			const reviewRating = await reviewCollection
+				.find(query, sumOption)
+				.toArray();
+			const sumOfReview = reviewRating.reduce(
+				(prev, { customer_rating }) => prev + customer_rating,
+				0
+			);
+			const averageSumOfReview = (sumOfReview / reviewsCount).toFixed(1);
 			res.send({ reviews, reviewsCount, averageSumOfReview });
 		});
 		//Post a new review by user
