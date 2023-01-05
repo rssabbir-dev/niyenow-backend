@@ -26,7 +26,9 @@ const client = new MongoClient(uri, {
 const verifyJWT = (req, res, next) => {
 	const authHead = req.headers.authorization;
 	if (!authHead) {
-		return res.status(401).send({ code: 401, message: 'User Access Denied' });
+		return res
+			.status(401)
+			.send({ code: 401, message: 'User Access Denied' });
 	}
 	const token = authHead.split(' ')[1];
 	jwt.verify(token, process.env.JWT_SECRET_TOKEN, (err, decoded) => {
@@ -43,7 +45,10 @@ const verifyJWT = (req, res, next) => {
 const verifyAuthorization = (req, res, uid) => {
 	const decoded = req.decoded;
 	if (uid !== decoded.uid) {
-		res.status(403).send({ code: 403, message: 'Access Forbidden, User not match' });
+		res.status(403).send({
+			code: 403,
+			message: 'Access Forbidden, User not match',
+		});
 		return false;
 	}
 	return true;
@@ -94,7 +99,7 @@ const run = async () => {
 				.find(query)
 				.skip(perPageView * currentPage)
 				.limit(perPageView)
-				.sort({createAt:-1})
+				.sort({ createAt: -1 })
 				.toArray();
 			const productsCount = await productCollection.countDocuments(query);
 			res.send({ products, productsCount });
@@ -232,7 +237,10 @@ const run = async () => {
 				}
 				// const query = { 'seller_info.seller_uid': uid };
 				const query = {};
-				const products = await productCollection.find(query).sort({createAt:-1}).toArray();
+				const products = await productCollection
+					.find(query)
+					.sort({ createAt: -1 })
+					.toArray();
 				res.send(products);
 			}
 		);
@@ -269,6 +277,24 @@ const run = async () => {
 			const result = await cartCollection.insertOne(order);
 			res.send(result);
 		});
+
+		// app.get('/check-is-order/:uid', verifyJWT, async (req, res) => {
+		// 	const uid = req.params.uid;
+		// 	const id = req.query.id;
+		// 	const query = { _id: ObjectId(id) };
+		// 	const valid = verifyAuthorization(req, res, uid);
+		// 	if (!valid) {
+		// 		return;
+		// 	}
+		// 	const order = await orderCollection
+		// 		.find(
+		// 			{ customer_uid: uid },
+		// 			{ projection: { _id: 0, ordered_products: 1 } }
+		// 		)
+		// 		.toArray();
+		// 		console.log(order);
+		// 	res.send(true);
+		// });
 
 		//Get All User Cart
 		app.get('/get-cart/:uid', verifyJWT, async (req, res) => {
@@ -324,6 +350,24 @@ const run = async () => {
 			const customers = await userCollection.find(query).toArray();
 			res.send(customers);
 		});
+		app.get(
+			'/customers/details/:uid',
+			verifyJWT,
+			verifyAdmin,
+			async (req, res) => {
+				const uid = req.params.uid;
+				const valid = verifyAuthorization(req, res, uid);
+				if (!valid) {
+					return;
+				}
+				const customerUid = req.query.customerUid;
+				const query = { customer_uid: customerUid };
+				const customerOrders = await orderCollection
+					.find( query )
+					.toArray();
+				res.send({customerOrders});
+			}
+		);
 
 		//Confirm and save user order in database
 		app.post('/confirm-order/:uid', verifyJWT, async (req, res) => {
@@ -644,10 +688,10 @@ const run = async () => {
 				return;
 			}
 			const id = req.query.id;
-			const filter = {_id:ObjectId(id)}
-			const result = await sliderCollection.deleteOne(filter)
-			res.send(result)
-		})
+			const filter = { _id: ObjectId(id) };
+			const result = await sliderCollection.deleteOne(filter);
+			res.send(result);
+		});
 		//Get top three category items for home page
 		app.get('/top-categories', async (req, res) => {
 			const query = {};
@@ -668,7 +712,6 @@ const run = async () => {
 			res.send({ category_name: category.name, products: products });
 		});
 
-		
 		//Get all AdminHome dashboard data
 		app.get(
 			'/dashboard-data/:uid',
@@ -742,7 +785,7 @@ const run = async () => {
 				.find(query)
 				.skip(perPageView * currentPage)
 				.limit(perPageView)
-				.sort({createAt:-1})
+				.sort({ createAt: -1 })
 				.toArray();
 			const reviewsCount = await reviewCollection.countDocuments(query);
 			const sumOption = {
@@ -762,7 +805,7 @@ const run = async () => {
 				(prev, { customer_rating }) => prev + customer_rating,
 				0
 			);
-			const averageSumOfReview = (sumOfReview / reviewsCount).toFixed(1);
+			const averageSumOfReview = sumOfReview / reviewsCount;
 			res.send({ reviews, reviewsCount, averageSumOfReview });
 		});
 		//Post a new review by user
