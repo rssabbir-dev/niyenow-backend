@@ -258,7 +258,6 @@ const run = async () => {
 				'product_info.id': order.product_info.id,
 				uid: uid,
 			});
-			console.log(prevOrder);
 			if (prevOrder?.product_info?.id) {
 				const updateQuery = { _id: ObjectId(prevOrder._id) };
 				const updateDoc = {
@@ -278,23 +277,30 @@ const run = async () => {
 			res.send(result);
 		});
 
-		// app.get('/check-is-order/:uid', verifyJWT, async (req, res) => {
-		// 	const uid = req.params.uid;
-		// 	const id = req.query.id;
-		// 	const query = { _id: ObjectId(id) };
-		// 	const valid = verifyAuthorization(req, res, uid);
-		// 	if (!valid) {
-		// 		return;
-		// 	}
-		// 	const order = await orderCollection
-		// 		.find(
-		// 			{ customer_uid: uid },
-		// 			{ projection: { _id: 0, ordered_products: 1 } }
-		// 		)
-		// 		.toArray();
-		// 		console.log(order);
-		// 	res.send(true);
-		// });
+		app.get('/check-is-order/:uid', verifyJWT, async (req, res) => {
+			const uid = req.params.uid;
+			const id = req.query.id;
+			const valid = verifyAuthorization(req, res, uid);
+			if (!valid) {
+				return;
+			}
+			const option = {
+				projection: {
+					_id: 0,
+					ordered_products: 1,
+				},
+			};
+			const order = await orderCollection
+				.find({ customer_uid: uid },option)
+				.toArray();
+			const products = order.reduce((prev, curr) => {
+				const pds = [...curr.ordered_products]
+				prev.push(...pds)
+				return prev
+			}, [])
+			const product = products.find(pd => pd.product_info.id === id)
+			res.send(!!product?._id);
+		});
 
 		//Get All User Cart
 		app.get('/get-cart/:uid', verifyJWT, async (req, res) => {
@@ -363,9 +369,9 @@ const run = async () => {
 				const customerUid = req.query.customerUid;
 				const query = { customer_uid: customerUid };
 				const customerOrders = await orderCollection
-					.find( query )
+					.find(query)
 					.toArray();
-				res.send({customerOrders});
+				res.send({ customerOrders });
 			}
 		);
 
