@@ -588,14 +588,14 @@ const run = async () => {
 		);
 
 		//Top Sales
-		// app.get('/top-sales', async (req, res) => {
-		// 	const products = await productCollection
-		// 		.find({})
-		// 		.sort({ 'product_info.totalSale': -1 })
-		// 		.limit(5)
-		// 		.toArray();
-		// 	res.send(products);
-		// });
+		app.get('/top-sales', async (req, res) => {
+			const products = await productCollection
+				.find({})
+				.sort({ 'product_info.totalSale': -1 })
+				.limit(4)
+				.toArray();
+			res.send(products);
+		});
 		//Recent Product Added
 		// app.get('/recent-products', async (req, res) => {
 		// 	const products = await productCollection
