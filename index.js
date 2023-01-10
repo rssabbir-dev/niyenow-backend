@@ -291,14 +291,14 @@ const run = async () => {
 				},
 			};
 			const order = await orderCollection
-				.find({ customer_uid: uid },option)
+				.find({ customer_uid: uid }, option)
 				.toArray();
 			const products = order.reduce((prev, curr) => {
-				const pds = [...curr.ordered_products]
-				prev.push(...pds)
-				return prev
-			}, [])
-			const product = products.find(pd => pd.product_info.id === id)
+				const pds = [...curr.ordered_products];
+				prev.push(...pds);
+				return prev;
+			}, []);
+			const product = products.find((pd) => pd.product_info.id === id);
 			res.send(!!product?._id);
 		});
 
@@ -371,7 +371,10 @@ const run = async () => {
 				const customerOrders = await orderCollection
 					.find(query)
 					.toArray();
-				res.send({ customerOrders });
+				const customer = await userCollection.findOne({
+					uid: customerUid,
+				});
+				res.send({ customerOrders, customer });
 			}
 		);
 
@@ -740,6 +743,11 @@ const run = async () => {
 					.sort({ createAt: -1 })
 					.limit(5)
 					.toArray();
+				const recentOrders = await orderCollection
+					.find({})
+					.sort({ createAt: -1 })
+					.limit(5)
+					.toArray();
 				const monthlyAllSales = await paymentCollection
 					.find({})
 					.toArray();
@@ -777,6 +785,7 @@ const run = async () => {
 					totalOrder,
 					totalProducts,
 					todaySale: todaySale?.income,
+					recentOrders,
 				});
 			}
 		);
@@ -824,6 +833,49 @@ const run = async () => {
 			const review = req.body;
 			const result = await reviewCollection.insertOne(review);
 			res.send(result);
+		});
+
+		//HomeData
+		app.get('/home-data', async (req, res) => {
+			const categories = await categoryCollection
+				.find({})
+				.limit(10)
+				.toArray();
+			const sliders = await sliderCollection.find({}).toArray();
+			const topCategories = await categoryCollection
+				.find({})
+				.limit(3)
+				.sort({ createAt: -1 })
+				.toArray();
+			const topProducts = await productCollection
+				.find({})
+				.sort({ 'product_info.totalSale': -1 })
+				.limit(4)
+				.toArray();
+			const womanCollection = await productCollection
+				.find({ 'product_info.category_slug': 'woman-collection' })
+				.sort({ 'product_info.totalSale': -1 })
+				.limit(4)
+				.toArray();
+			const kidCollection = await productCollection
+				.find({ 'product_info.category_slug': 'kids-collection' })
+				.sort({ 'product_info.totalSale': -1 })
+				.limit(4)
+				.toArray();
+			const manCollection = await productCollection
+				.find({ 'product_info.category_slug': 'mans-collection' })
+				.sort({ 'product_info.totalSale': -1 })
+				.limit(4)
+				.toArray();
+			res.send({
+				categories,
+				topCategories,
+				sliders,
+				topProducts,
+				womanCollection,
+				kidCollection,
+				manCollection,
+			});
 		});
 	} finally {
 	}
