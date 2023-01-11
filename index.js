@@ -5,7 +5,7 @@ require('dotenv').config();
 const jwt = require('jsonwebtoken');
 const port = process.env.PORT || 5000;
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
-const { format } = require('date-fns');
+const { format, areIntervalsOverlapping } = require('date-fns');
 const stripe = require('stripe')(process.env.STRIPE_SECRET);
 
 //Middleware
@@ -412,7 +412,7 @@ const run = async () => {
 			}
 			const query = { _id: ObjectId(id) };
 			const order = await orderCollection.findOne(query);
-			const price = order.subTotal;
+			const price = order.subTotal * 100;
 			const paymentIntent = await stripe.paymentIntents.create({
 				amount: price,
 				currency: 'usd',
@@ -765,23 +765,47 @@ const run = async () => {
 					},
 					{}
 				);
-				const monthlyChartData = [];
+				const date = format(new Date(), 'P');
+				const chartData = [];
+				for (let i = 1; i <= 31; i++) {
+					let num = i;
+					if (num < 10) {
+						num = `0${i}`;
+					}
+					chartData.push({
+						date: `${date.split('/')[0]}/${num}/${
+							date.split('/')[2]
+						}`,
+						income: 0,
+					});
+				}
+				// const monthlyChartData = [];
 				for (const key in totalMonthlySales) {
 					const income = totalMonthlySales[key];
-					monthlyChartData.push({ date: key, income });
+					const currentDate = format(new Date(), 'P');
+					if (
+						currentDate.split('/')[0] === key.split('/')[0] &&
+						currentDate.split('/')[2] === key.split('/')[2]
+					)
+						// monthlyChartData.push({ date: key, income });
+						chartData.map((d) => {
+							if (d.date === key) {
+								d.income = income;
+							}
+						});
 				}
 				const totalOrder =
 					await orderCollection.estimatedDocumentCount();
 				const totalProducts =
 					await productCollection.estimatedDocumentCount();
 				const todayDate = format(new Date(), 'P');
-				const todaySale = monthlyChartData.find(
+				const todaySale = chartData.find(
 					(chart) => chart.date === todayDate
 				);
 				res.send({
 					topSellingProducts,
 					recentProducts,
-					monthlyChartData,
+					monthlyChartData: chartData,
 					totalOrder,
 					totalProducts,
 					todaySale: todaySale?.income,
@@ -839,13 +863,13 @@ const run = async () => {
 		app.get('/home-data', async (req, res) => {
 			const categories = await categoryCollection
 				.find({})
-				.limit(10)
+				.limit(11)
 				.toArray();
 			const sliders = await sliderCollection.find({}).toArray();
 			const topCategories = await categoryCollection
 				.find({})
 				.limit(3)
-				.sort({ createAt: -1 })
+				.sort({ createAt: 1 })
 				.toArray();
 			const topProducts = await productCollection
 				.find({})
